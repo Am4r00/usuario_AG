@@ -5,6 +5,7 @@ import com.amaro.usuario.infrastructure.entity.Usuario;
 import com.amaro.usuario.infrastructure.exceptions.ConflictException;
 import com.amaro.usuario.infrastructure.exceptions.ResourceNotFoundException;
 import com.amaro.usuario.infrastructure.repository.UsuarioRepository;
+import com.amaro.usuario.infrastructure.security.JwtUtil;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -14,11 +15,13 @@ public class UsuarioService {
     private final UsuarioRepository usuarioRepository;
     private final UsuarioConverter usuarioConverter;
     private final PasswordEncoder passwordEncoder;
+    private final JwtUtil jwtUtil;
 
-    public UsuarioService(UsuarioRepository usuarioRepository, UsuarioConverter usuarioConverter, PasswordEncoder passwordEncoder) {
+    public UsuarioService(UsuarioRepository usuarioRepository, UsuarioConverter usuarioConverter, PasswordEncoder passwordEncoder,JwtUtil jwtUtil) {
         this.usuarioRepository = usuarioRepository;
         this.usuarioConverter = usuarioConverter;
         this.passwordEncoder = passwordEncoder;
+        this.jwtUtil = jwtUtil;
     }
 
     public UsuarioDTO cadastrarUsuario(UsuarioDTO usuarioDTO){
@@ -41,6 +44,16 @@ public class UsuarioService {
         usuarioRepository.deleteByEmail(email);
     }
 
+    public UsuarioDTO atualizarUser (String token, UsuarioDTO dto){
+        String email = jwtUtil.extractUsername(token.substring(7));
+        dto.setSenha(dto.getSenha() != null ? passwordEncoder.encode(dto.getSenha()) : null );
+
+        Usuario usuarioEntity = usuarioRepository.findByEmail(dto.getEmail()).orElseThrow(() ->
+                new ResourceNotFoundException("email não encontrado"));
+
+        Usuario usuario = usuarioConverter.checkUser(dto, usuarioEntity);
+        return usuarioConverter.paraUsuarioDTO(usuario);
+    }
 
     private void checarEmail(String email) {
         try {
