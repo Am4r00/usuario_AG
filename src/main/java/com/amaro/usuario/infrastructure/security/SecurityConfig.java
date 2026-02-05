@@ -1,24 +1,58 @@
 package com.amaro.usuario.infrastructure.security;
 
-import com.amaro.usuario.infrastructure.entity.Usuario;
-import com.amaro.usuario.infrastructure.repository.UsuarioRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.stereotype.Service;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
-@Service
-public class UserDetailsServiceImpl implements UserDetailsService {
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    private final JwtUtil jwtUtil;
+    private final UserDetailsService userDetailsService;
 
     @Autowired
-    private UsuarioRepository usuarioRepository;
-
-    @Override
-    public UserDetails loadUserByUsername(String email) {
-
-        Usuario usuario = usuarioRepository.findByEmail(email).orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado: " + email));
-
-        return org.springframework.security.core.userdetails.User.withUsername(usuario.getEmail()).password(usuario.getSenha()).build();
+    public SecurityConfig(JwtUtil jwtUtil, UserDetailsService userDetailsService) {
+        this.jwtUtil = jwtUtil;
+        this.userDetailsService = userDetailsService;
     }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        JwtRequestFilter jwtRequestFilter = new JwtRequestFilter(jwtUtil, userDetailsService);
+
+        http.csrf(AbstractHttpConfigurer::disable)
+                .authorizeHttpRequests(authorize ->
+                        authorize.requestMatchers("/usuario").permitAll()
+                                 .requestMatchers(HttpMethod.GET, "/auth").permitAll()
+                                 .requestMatchers(HttpMethod.POST, "/usuario").permitAll()
+                                 .requestMatchers("/usuario/**").authenticated()
+                                 .anyRequest().authenticated()).sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)).addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration) throws Exception {
+        return authenticationConfiguration.getAuthenticationManager();
+    }
+
 }
+
